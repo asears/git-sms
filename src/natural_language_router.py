@@ -1,37 +1,66 @@
-import os
+"""Natural language command router for GitHub-related tasks."""
+
 import json
-import requests
-from dotenv import load_dotenv
+import os
+from typing import Any, Literal
+
+import httpx
 from azure.ai.inference import ChatCompletionsClient
 from azure.ai.inference.models import SystemMessage, UserMessage
 from azure.core.credentials import AzureKeyCredential
+from dotenv import load_dotenv
+
+from commands import create_issue, create_repo
 from summarizers import summarize_any_repo, summarize_latest_issue
-from commands import create_repo, create_issue
 
 load_dotenv()
 
-# Azure OpenAI config
-endpoint = "https://models.github.ai/inference"
-model_name = "openai/gpt-4o"
-token = os.getenv("GITHUB_OPENAI_API_KEY")
 
-client = ChatCompletionsClient(
-    endpoint=endpoint,
-    credential=AzureKeyCredential(token),
-)
+def get_azure_openai_client() -> ChatCompletionsClient:
+    """Initialize and return an Azure OpenAI ChatCompletionsClient.
 
-def github_search_repo(query):
-    headers = {
-        "Authorization": f"Bearer {os.getenv('GITHUB_TOKEN')}",
-        "Accept": "application/vnd.github+json"
-    }
+    Raises:
+        ValueError: If the GITHUB_OPENAI_API_KEY environment variable is not set.
+
+    Returns:
+        ChatCompletionsClient: The initialized client.
+    """
+    endpoint = "https://models.github.ai/inference"
+    # model_name = "openai/gpt-4o"
+    token = os.getenv("GITHUB_OPENAI_API_KEY")
+
+    if not token:
+        err_msg = "GITHUB_OPENAI_API_KEY environment variable not set."
+        raise ValueError(err_msg)
+
+    return ChatCompletionsClient(
+        endpoint=endpoint,
+        credential=AzureKeyCredential(token),
+    )
+
+
+client = get_azure_openai_client()
+# model_name = "openai/gpt-4o"
+
+
+def github_search_repo(query: str) -> str | None:
+    """Search GitHub for a repository matching the query.
+
+    Args:
+        query (str): The search query.
+
+    Returns:
+        str | None: The full name of the best matching
+        repository, or None if no match found.
+    """
+    headers = {"Authorization": f"Bearer {os.getenv('GITHUB_TOKEN')}", "Accept": "application/vnd.github+json"}
 
     terms = "+".join(query.strip().split())
     url = f"https://api.github.com/search/repositories?q={terms}+in:name,description&sort=stars&order=desc&per_page=10"
 
     try:
-        res = requests.get(url, headers=headers)
-        if res.ok:
+        res = httpx.get(url, headers=headers)
+        if res.is_success:
             items = res.json().get("items", [])
             query_lower = query.lower()
 
@@ -49,14 +78,24 @@ def github_search_repo(query):
 
             if items:
                 print("[github_search_repo] Weak fallback match:", items[0]["full_name"])
-                return items[0]["full_name"]
+                return str(items[0]["full_name"])
     except Exception as e:
         print("[github_search_repo] Error:", e)
 
     return None
 
-def parse_command_naturally(user_input: str):
-    prompt = f'''
+
+def parse_command_naturally(user_input: str, model_name: str) -> dict[str, str | None] | Any:
+    """Parse a natural language command into structured intent.
+
+    Args:
+        user_input (str): The natural language command input.
+        model_name (str): The model name to use for parsing.
+
+    Returns:
+        dict: Parsed command intent with keys: action, repo, title, body, issue_number.
+    """
+    prompt = f"""
 You are a GitHub command interpreter. Your job is to extract structured command intents from natural language inputs.
 
 Output your result as JSON with keys: action, repo, title, body, issue_number (use null for any missing fields).
@@ -75,17 +114,17 @@ Input: "I want to file a bug in next.js"
 {{"action": "create_issue", "repo": "vercel/next.js", "title": "Bug report", "body": null, "issue_number": null}}
 
 Now extract the intent from: "{user_input}"
-'''.strip()
+""".strip()
 
     try:
-        response = client.complete(
+        response = client.complete(  # type: ignore[unresolved-attribute]
             model=model_name,
             temperature=0.2,
             max_tokens=300,
             messages=[
                 SystemMessage("You extract structured commands from natural GitHub-related messages."),
-                UserMessage(prompt)
-            ]
+                UserMessage(prompt),
+            ],
         )
         raw = response.choices[0].message.content.strip()
         print("[parse_command_naturally] Raw output:", raw)
@@ -93,12 +132,16 @@ Now extract the intent from: "{user_input}"
         if raw.startswith("```"):
             raw = raw.strip("`").strip()
             if raw.startswith("json"):
-                raw = raw[len("json"):].strip()
+                raw = raw[len("json") :].strip()
 
         parsed = json.loads(raw)
 
         # Guess repo if needed
-        if parsed.get("action") in ["summarize_repo", "summarize_latest_issue", "create_issue"] and not parsed.get("repo"):
+        if parsed.get("action") in {
+            "summarize_repo",
+            "summarize_latest_issue",
+            "create_issue",
+        } and not parsed.get("repo"):
             guess = github_search_repo(user_input)
             if guess:
                 parsed["repo"] = guess
@@ -107,10 +150,37 @@ Now extract the intent from: "{user_input}"
         return parsed
     except Exception as e:
         print("[parse_command_naturally] Parsing failed:", e)
-        return {"action": "unknown", "repo": None, "title": None, "body": None, "issue_number": None}
+        return {
+            "action": "unknown",
+            "repo": None,
+            "title": None,
+            "body": None,
+            "issue_number": None,
+        }
 
-def route_natural_command(user_text: str):
-    intent = parse_command_naturally(user_text)
+
+def route_natural_command(
+    user_text: str,
+    model_name: str,
+) -> (
+    Literal[
+        "Created repo.",
+        "Failed to create issue.",
+        "Failed to create repo.",
+        "Issue created.",
+    ]
+    | None
+):
+    """Route a natural language command to the appropriate GitHub action.
+
+    Args:
+        user_text (str): The natural language command input.
+        model_name (str): The model name to use for parsing.
+
+    Returns:
+        str | None: The result of the executed action, or None if no action taken.
+    """
+    intent = parse_command_naturally(user_text, model_name)
     print("[route_natural_command] Parsed intent:", intent)
     action = intent.get("action")
     repo = intent.get("repo")
