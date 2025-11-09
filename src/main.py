@@ -15,7 +15,9 @@ from commands import create_issue, create_repo
 from natural_language_router import route_natural_command
 from summarizers import summarize_any_repo, summarize_latest_issue, summarize_specific_issue
 
+# Load environment variables
 load_dotenv()
+# Initialize FastAPI app
 app = FastAPI()
 
 # Azure OpenAI configuration
