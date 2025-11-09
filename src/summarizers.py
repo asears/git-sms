@@ -4,12 +4,12 @@ import base64
 import logging
 import os
 from typing import Literal
-
-import httpx
 import tiktoken
+import httpx
 from dotenv import load_dotenv
-
+from langchain_core.messages import SystemMessage, HumanMessage
 from commands import get_headers
+from connections import get_azure_openai_client, get_openai_client
 
 load_dotenv()
 
@@ -18,58 +18,57 @@ log = logging.getLogger(__name__)
 
 # OpenAI configuration (Azure preferred if available)
 USE_AZURE = bool(os.getenv("GITHUB_OPENAI_API_KEY"))
-if USE_AZURE:
-    from azure.ai.inference import ChatCompletionsClient
-    from azure.ai.inference.models import SystemMessage, UserMessage
-    from azure.core.credentials import AzureKeyCredential
-
-    AZURE_ENDPOINT = "https://models.github.ai/inference"
-    MODEL_NAME = "openai/gpt-4o"
-    AZURE_TOKEN = os.getenv("GITHUB_OPENAI_API_KEY")
-    if not AZURE_TOKEN:
-        err_msg = "AZURE_TOKEN environment variable not set."
-        raise ValueError(err_msg)
-    client = ChatCompletionsClient(
-        endpoint=AZURE_ENDPOINT,
-        credential=AzureKeyCredential(AZURE_TOKEN),
-    )
-else:
-    from openai import OpenAI
-
-    MODEL_NAME = "gpt-4o"
-    OPENAI_TOKEN = os.getenv("OPENAI_API_KEY")
-    client = OpenAI(api_key=OPENAI_TOKEN)
-
-ENCODER = tiktoken.get_encoding("cl100k_base")
 MAX_TOKENS = 16000
 SLICE_LIMIT = 4000  # Max README slice size
 ASK_OPENAI_MAX_LENGTH = 1000  # Max response length
+AZ_OPENAI_MODEL_NAME = "openai/gpt-4o"
+MODEL_NAME = "gpt-4o"
+
+if USE_AZURE:
+    client = get_azure_openai_client()
+else:
+    client = get_openai_client()
+
+def get_encoder(encoding_name="cl100k_base") -> tiktoken.Encoding:
+    """Get the appropriate tokenizer/encoder based on the model being used.
+
+    Args:
+        encoding_name (str): The name of the encoding to use.
+        
+    Returns:
+        tiktoken.Encoding: The tokenizer/encoder.
+    """
+    encoder = tiktoken.get_encoding(encoding_name)
+    return encoder
 
 
-def num_tokens(text: str) -> int:
+def num_tokens(text: str, encoder: tiktoken.Encoding) -> int:
     """Calculate the number of tokens in the given text.
 
     Args:
         text (str): The input text.
+        encoder (tiktoken.Encoding): The tokenizer/encoder to use.
 
     Returns:
         int: The number of tokens.
     """
-    return len(ENCODER.encode(text))
+    
+    return len(encoder.encode(text))
 
 
-def truncate_text(text: str, token_limit: int) -> str:
+def truncate_text(text: str, token_limit: int, encoder: tiktoken.Encoding) -> str:
     """Truncate text to fit within the specified token limit.
 
     Args:
         text (str): The input text.
         token_limit (int): The maximum number of tokens allowed.
-
+        encoder (tiktoken.Encoding): The tokenizer/encoder to use.
+        
     Returns:
         str: The truncated text.
     """
-    tokens = ENCODER.encode(text)
-    return ENCODER.decode(tokens[:token_limit])
+    tokens = encoder.encode(text)
+    return encoder.decode(tokens[:token_limit])
 
 
 def ask_openai(prompt: str) -> None:
@@ -84,12 +83,12 @@ def ask_openai(prompt: str) -> None:
     try:
         if USE_AZURE:
             response = client.complete(  # type: ignore[unresolved-attribute]
-                model=MODEL_NAME,
+                model=AZ_OPENAI_MODEL_NAME,
                 temperature=0.2,
                 max_tokens=700,
                 messages=[
                     SystemMessage(content="Summarize GitHub repo content in under 1000 characters."),
-                    UserMessage(content=prompt),
+                    HumanMessage(content=prompt),
                 ],
             )
             return response.choices[0].message.content.strip()
@@ -118,6 +117,7 @@ def summarize_any_repo(repo_full_name: str) -> str:
         str: The summary of the repository.
 
     """
+    encoder = get_encoder()
     print(f"[summarize_any_repo] Summarizing {repo_full_name}")
     headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {os.getenv('GITHUB_TOKEN')}"}
 
@@ -152,10 +152,10 @@ README:
 {readme_text}
         """.strip()
 
-        total_tokens = num_tokens(prompt)
+        total_tokens = num_tokens(prompt, encoder)
         if total_tokens > MAX_TOKENS:
             print(f"[summarize_any_repo] Trimming README to fit {MAX_TOKENS} token budget.")
-            allowable_tokens = MAX_TOKENS - num_tokens(prompt) + num_tokens(readme_text)
+            allowable_tokens = MAX_TOKENS - num_tokens(prompt, encoder) + num_tokens(readme_text, encoder)
             readme_text = truncate_text(readme_text, allowable_tokens)
             prompt = f"""
 Summarize this GitHub repo:

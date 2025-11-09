@@ -1,6 +1,5 @@
 """Test summarizers."""
 
-from summarizers import summarize_text
 
 
 def test_summarize_text(mocker) -> None:
@@ -10,8 +9,9 @@ def test_summarize_text(mocker) -> None:
     Asserts:
         - The summary returned is as expected.
     """
-    mocker.patch("summarizers.ask_openai", return_value="This is a summary.")
-
+    mocker.patch("connections.get_openai_client")
+    from summarizers import summarize_text
+    
     text = "This is a long text that needs to be summarized."
     summary = summarize_text(text)
 

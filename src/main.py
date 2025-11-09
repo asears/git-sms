@@ -15,27 +15,29 @@ from commands import create_issue, create_repo
 from natural_language_router import route_natural_command
 from summarizers import summarize_any_repo, summarize_latest_issue, summarize_specific_issue
 
-# Load environment variables
-load_dotenv()
-# Initialize FastAPI app
-app = FastAPI()
-
-# Azure OpenAI configuration
-endpoint = "https://models.github.ai/inference"
-model_name = "openai/gpt-4o"
-token = os.getenv("GITHUB_OPENAI_API_KEY")
-
-if not token:
-    err_msg = "GITHUB_OPENAI_API_KEY environment variable not set."
-    raise ValueError(err_msg)
-
-client = ChatCompletionsClient(
-    endpoint=endpoint,
-    credential=AzureKeyCredential(token),
-)
-
 SLICE_LIMIT = 4000  # Max README slice size
 ASK_OPENAI_MAX_LENGTH = 1000  # Max response length
+
+if __name__ == "__main__":
+    # Load environment variables
+    load_dotenv()
+    # Initialize FastAPI app
+    app = FastAPI()
+
+    # Azure OpenAI configuration
+    endpoint = "https://models.github.ai/inference"
+    model_name = "openai/gpt-4o"
+    token = os.getenv("GITHUB_OPENAI_API_KEY")
+
+    if not token:
+        err_msg = "GITHUB_OPENAI_API_KEY environment variable not set."
+        raise ValueError(err_msg)
+
+    client = ChatCompletionsClient(
+        endpoint=endpoint,
+        credential=AzureKeyCredential(token),
+    )
+
 
 
 def ask_openai(prompt: str, temperature: float = 0.7) -> str:
