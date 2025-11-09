@@ -8,6 +8,8 @@ on:
     types:
       - opened
       - synchronize
+permissions: 
+  contents: read
 
 jobs:
   lint:
