@@ -15,6 +15,18 @@ dependencies = [
     "uvicorn",
 ]
 
+[dependency-groups]
+dev = [
+    "ty>=0.0.1a25",
+    "pytest-cov",
+    "pytest-mock",
+    "pytest",
+    "ruff",
+]
+
+[tool.uv.dependency-groups]
+dev = {requires-python = ">=3.12"}
+
 [tool.setuptools]
 packages = ["git_sms"]
 
@@ -55,12 +67,3 @@ per-file-ignores = { "tests/*" = ["S101", "ANN"] }
 quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false
-
-[tool.uv]
-dev-dependencies = [
-    "ty>=0.0.1a25",
-    "pytest-cov",
-    "pytest-mock",
-    "pytest",
-    "ruff",
-]
