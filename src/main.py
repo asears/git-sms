@@ -39,7 +39,6 @@ if __name__ == "__main__":
     )
 
 
-
 def ask_openai(prompt: str, temperature: float = 0.7) -> str:
     """Ask the OpenAI model to generate a summary based on the prompt.
 

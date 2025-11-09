@@ -4,10 +4,12 @@ import base64
 import logging
 import os
 from typing import Literal
-import tiktoken
+
 import httpx
+import tiktoken
 from dotenv import load_dotenv
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
+
 from commands import get_headers
 from connections import get_azure_openai_client, get_openai_client
 
@@ -24,22 +26,19 @@ ASK_OPENAI_MAX_LENGTH = 1000  # Max response length
 AZ_OPENAI_MODEL_NAME = "openai/gpt-4o"
 MODEL_NAME = "gpt-4o"
 
-if USE_AZURE:
-    client = get_azure_openai_client()
-else:
-    client = get_openai_client()
+client = get_azure_openai_client() if USE_AZURE else get_openai_client()
 
-def get_encoder(encoding_name="cl100k_base") -> tiktoken.Encoding:
+
+def get_encoder(encoding_name: str = "cl100k_base") -> tiktoken.Encoding:
     """Get the appropriate tokenizer/encoder based on the model being used.
 
     Args:
         encoding_name (str): The name of the encoding to use.
-        
+
     Returns:
         tiktoken.Encoding: The tokenizer/encoder.
     """
-    encoder = tiktoken.get_encoding(encoding_name)
-    return encoder
+    return tiktoken.get_encoding(encoding_name)
 
 
 def num_tokens(text: str, encoder: tiktoken.Encoding) -> int:
@@ -52,7 +51,7 @@ def num_tokens(text: str, encoder: tiktoken.Encoding) -> int:
     Returns:
         int: The number of tokens.
     """
-    
+
     return len(encoder.encode(text))
 
 
@@ -63,7 +62,7 @@ def truncate_text(text: str, token_limit: int, encoder: tiktoken.Encoding) -> st
         text (str): The input text.
         token_limit (int): The maximum number of tokens allowed.
         encoder (tiktoken.Encoding): The tokenizer/encoder to use.
-        
+
     Returns:
         str: The truncated text.
     """

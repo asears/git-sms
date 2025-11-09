@@ -54,9 +54,10 @@ ignore = [
     "TRY",
     "ANN401",
     "ERA001",
+    "PLC0415",
 ]
 
-per-file-ignores = { "tests/*" = ["S101", "ANN"] }
+per-file-ignores = { "tests/*" = ["S101", "ANN",] }
 
 [tool.ruff.format]
 quote-style = "double"

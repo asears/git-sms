@@ -1,7 +1,6 @@
 """Test summarizers."""
 
 
-
 def test_summarize_text(mocker) -> None:
     """
     Test text summarization.
@@ -11,7 +10,7 @@ def test_summarize_text(mocker) -> None:
     """
     mocker.patch("connections.get_openai_client")
     from summarizers import summarize_text
-    
+
     text = "This is a long text that needs to be summarized."
     summary = summarize_text(text)
 
